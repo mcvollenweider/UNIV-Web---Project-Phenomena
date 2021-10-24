@@ -27,15 +27,38 @@ const client = new Client({
 async function getOpenReports() {
   try {
     // first load all of the reports which are open
+    const { rows: reports } = await client.query(
+      `
+      SELECT *
+      FROM reports
+      WHERE "isOpen" = true
+      `
+    );
     // then load the comments only for those reports, using a
     // WHERE "reportId" IN () clause
+    const { rows: comments } = await client.query(
+      `
+      SELECT *
+      FROM comments
+      WHERE "reportId" IN (${reports.map((report) => report.id).join(", ")})
+      `
+    );
     // then, build two new properties on each report:
     // .comments for the comments which go with it
-    //    it should be an array, even if there are none
-    // .isExpired if the expiration date is before now
-    //    you can use Date.parse(report.expirationDate) < new Date()
-    // also, remove the password from all reports
+
+    reports.forEach((report) => {
+      report.comments = comments.filter(
+        (comment) => comment.reportId === report.id
+      );
+      //    it should be an array, even if there are none
+      // .isExpired if the expiration date is before now
+      //    you can use Date.parse(report.expirationDate) < new Date()
+      // also, remove the password from all reports
+      delete report.password;
+      report.isExpired = Date.parse(report.expirationDate) < new Date();
+    });
     // finally, return the reports
+    return reports;
   } catch (error) {
     throw error;
   }
@@ -59,7 +82,9 @@ async function createReport(reportFields) {
   try {
     // insert the correct fields into the reports table
     // remember to return the new row from the query
-    const { rows: [report] } = await client.query(
+    const {
+      rows: [report],
+    } = await client.query(
       `
       INSERT INTO reports(title, location, description, password)
       VALUES ($1, $2, $3, $4)
